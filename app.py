@@ -1,21 +1,19 @@
 %%writefile app.py
-from flask import Flask
+from flask import Flask, request, jsonify
 import joblib
 import pandas as pd
 
-# Create an instance of the Flask application
+# Create Flask app
 app = Flask(__name__)
 
-# Load the trained model and scaler
-# These files are expected to be in the same directory as app.py
+# Load model and scaler
 model = joblib.load('logistic_regression_model.joblib')
 scaler = joblib.load('standard_scaler.joblib')
 
-# Define the categorical features for one-hot encoding
+# Categorical features
 categorical_features = ['product_category', 'customer_region', 'payment_method']
 
-# Define the list of feature columns expected by the model
-# These columns must be in the same order as during training
+# Model columns (same order as training)
 model_columns = ['price', 'discount_percent', 'quantity_sold', 'review_count',
                 'product_category_Books', 'product_category_Electronics', 'product_category_Fashion',
                 'product_category_Home & Kitchen', 'product_category_Sports',
@@ -23,9 +21,46 @@ model_columns = ['price', 'discount_percent', 'quantity_sold', 'review_count',
                 'payment_method_Credit Card', 'payment_method_Debit Card', 'payment_method_UPI',
                 'payment_method_Wallet']
 
-# Define a simple root route
+# Home route
 @app.route('/')
 def home():
-    return "Welcome to the Amazon Sales Prediction API! Use the /predict endpoint to get predictions."
+    return "Amazon Sales Prediction API is running 🚀"
 
-print("app.py created successfully with basic Flask structure and model_columns.")
+# Prediction route
+@app.route('/predict', methods=['POST'])
+def predict():
+    try:
+        data = request.json
+
+        # Convert input to DataFrame
+        df = pd.DataFrame([data])
+
+        # One-hot encoding
+        df = pd.get_dummies(df, columns=categorical_features)
+
+        # Add missing columns
+        for col in model_columns:
+            if col not in df.columns:
+                df[col] = 0
+
+        # Ensure correct order
+        df = df[model_columns]
+
+        # Scale numerical data
+        df_scaled = scaler.transform(df)
+
+        # Prediction
+        prediction = model.predict(df_scaled)[0]
+        probability = model.predict_proba(df_scaled)[0][1]
+
+        return jsonify({
+            'prediction': int(prediction),
+            'probability': float(probability)
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+# Run app
+if __name__ == '__main__':
+    app.run(debug=True)
